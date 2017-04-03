@@ -10,7 +10,7 @@ import keras.backend as K
 from util import save_model_details, save_model_output
 
 SCRIPT_PATH = '../examples/mnist_cnn.py'
-PREFIX = 'mnist_cnn_' + K.image_dim_ordering()
+PREFIX = 'mnist_cnn_real_' + K.image_dim_ordering()
 OUT_DIR = '.'
 
 print('Entering Keras script')
@@ -20,6 +20,6 @@ print('Saving model details')
 save_model_details(example.model, prefix=PREFIX, out_dir=OUT_DIR)
 
 print('Saving model outputs')
-save_model_output(example.model, example.X_test, example.Y_test, nb_examples=100, prefix=PREFIX, out_dir=OUT_DIR)
+save_model_output(example.model, example.x_test, example.y_test, nb_examples=100, prefix=PREFIX, out_dir=OUT_DIR)
 
 print('DONE!')

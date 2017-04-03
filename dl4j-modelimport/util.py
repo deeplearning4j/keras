@@ -7,7 +7,17 @@ from keras import backend as K
 from keras.models import Model, load_model
 
 BACKEND = K.backend()
-DIM_ORDERING = K.image_dim_ordering()
+
+if BACKEND == 'theano':
+    K.set_image_data_format('channels_first')
+elif BACKEND == 'tensorflow':
+    K.set_image_data_format('channels_last')
+else:
+    raise ValueError('Unknown Keras backend ' + K.backend())
+
+IMAGE_DIM_ORDERING = K.image_dim_ordering()
+IMAGE_DATA_FORMAT = K.image_data_format()
+
 
 def load_model_if_exists(prefix=None, out_dir=None):
     '''
