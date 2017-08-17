@@ -10,7 +10,8 @@ import keras.backend as K
 from util import save_model_details, save_model_output
 
 SCRIPT_PATH = '../examples/mnist_mlp.py'
-PREFIX = 'mnist_mlp_' + K.image_dim_ordering()
+KERAS_VERSION = '_keras_1'
+PREFIX = 'mnist_mlp_' + K.image_dim_ordering() + KERAS_VERSION
 OUT_DIR = '.'
 
 print('Entering Keras script')
