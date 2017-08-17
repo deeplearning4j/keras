@@ -1,5 +1,7 @@
 '''
-Test import of Keras IMDB fasttext model.
+Create a simple imdb fasttext net for testing Keras model import. Run
+Keras imdb_lstm.py example and then save that model and its
+outputs to disk.
 '''
 from __future__ import print_function
 
@@ -8,7 +10,8 @@ import keras.backend as K
 from util import save_model_details, save_model_output
 
 SCRIPT_PATH = '../examples/imdb_fasttext.py'
-PREFIX = 'imdb_fasttext'
+KERAS_VERSION = '_keras_2'
+PREFIX = 'imdb_fasttext_' + K.image_dim_ordering() + KERAS_VERSION
 OUT_DIR = '.'
 
 print('Entering Keras script')
