@@ -1,5 +1,5 @@
 '''
-Create a simple ConvNet for testing Keras model import. Run
+Create a simple MLP for testing Keras model import. Run
 Keras mnist_cnn.py example and then save that model and its
 outputs to disk.
 '''
@@ -10,7 +10,8 @@ import keras.backend as K
 from util import save_model_details, save_model_output
 
 SCRIPT_PATH = '../examples/mnist_mlp.py'
-PREFIX = 'mnist_mlp_' + K.image_dim_ordering()
+KERAS_VERSION = '_keras_2'
+PREFIX = 'mnist_mlp_' + K.image_dim_ordering() + KERAS_VERSION
 OUT_DIR = '.'
 
 print('Entering Keras script')
