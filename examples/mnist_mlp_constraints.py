@@ -12,6 +12,7 @@ from keras.datasets import mnist
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import RMSprop
+from keras.constraints import max_norm, non_neg, unit_norm, min_max_norm
 
 batch_size = 128
 num_classes = 10
@@ -34,11 +35,13 @@ y_train = keras.utils.to_categorical(y_train, num_classes)
 Y_test = keras.utils.to_categorical(Y_test, num_classes)
 
 model = Sequential()
-model.add(Dense(512, activation='relu', input_shape=(784,)))
+model.add(Dense(512, activation='relu', input_shape=(784,), kernel_constraint=max_norm(2.)))
 model.add(Dropout(0.2))
-model.add(Dense(512, activation='relu'))
+model.add(Dense(512, activation='relu', bias_constraint=non_neg()))
 model.add(Dropout(0.2))
-model.add(Dense(10, activation='softmax'))
+model.add(Dense(512, activation='relu', kernel_constraint=unit_norm()))
+model.add(Dropout(0.2))
+model.add(Dense(10, activation='softmax', bias_constraint=min_max_norm(0.0, 1.0)))
 
 model.summary()
 
