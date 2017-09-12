@@ -23,18 +23,18 @@ embedding_dims = 50
 filters = 250
 kernel_size = 3
 hidden_dims = 250
-epochs = 2
+epochs = 1
 
 print('Loading data...')
-(x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=max_features)
+(x_train, y_train), (X_test, Y_test) = imdb.load_data(num_words=max_features)
 print(len(x_train), 'train sequences')
-print(len(x_test), 'test sequences')
+print(len(X_test), 'test sequences')
 
 print('Pad sequences (samples x time)')
 x_train = sequence.pad_sequences(x_train, maxlen=maxlen)
-x_test = sequence.pad_sequences(x_test, maxlen=maxlen)
+X_test = sequence.pad_sequences(X_test, maxlen=maxlen)
 print('x_train shape:', x_train.shape)
-print('x_test shape:', x_test.shape)
+print('X_test shape:', X_test.shape)
 
 print('Build model...')
 model = Sequential()
@@ -71,4 +71,4 @@ model.compile(loss='binary_crossentropy',
 model.fit(x_train, y_train,
           batch_size=batch_size,
           epochs=epochs,
-          validation_data=(x_test, y_test))
+          validation_data=(X_test, Y_test))
