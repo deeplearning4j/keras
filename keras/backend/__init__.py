@@ -13,6 +13,9 @@ from .common import set_image_data_format
 
 _BACKEND = 'deeplearning4j'
 
+
+sys.stderr.write('Using deeplearning4j backend\n')
+
 from jumpy.keras.dl4j_backend import *
 
 def backend():
