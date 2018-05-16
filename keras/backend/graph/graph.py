@@ -1,14 +1,23 @@
 class Placeholder(object):
 
     def __init__(self, **kwargs):
-        self.kwargs = kwargs.copy()
+        for k in kwargs:
+            setattr(self, k, kwargs[k])
 
     def eval(self):
         try:
             return self.value
         except AttributeError:
             try:
-                self.value = self.op(self.inputs)
+                ags = list(self.ags)
+                for i, a in enumerate(args):
+                    if isinstance(a, Placeholder):
+                        args[i] = a.eval()
+                for k in kwargs:
+                    v = kwargs[k]
+                    if isinstance(v, Placeholder):
+                        kwargs[k] = v.eval()
+                self.value = self.op.f(*args, **kwargs)
                 return self.value
             except AttributeError:
                 raise Exception('Uable to evaluate. No value/inputs provided.')
@@ -30,17 +39,9 @@ class Op(object):
     def __init__(self, f):
         self.f = f
 
-    def __call__(self, x):
-        xt = type(x)
-        if xt in (Placeholder, Variable):
-            y = Placeholder()
-            y.inputs = x
-            y.op = self
-            return y
-        if xt is list:
-            x = [x.eval() if type(x) is Placeholder else x]
-        elif xt is tuple:
-            x = tuple([x.eval() if type(x) is Placeholder else x])
-        elif xt is Placeholder:
-            x = x.eval()
-        return self.f(x)
+    def __call__(self, *args, **kwargs):
+        y = Placeholder()
+        y.op = self
+        y.args = args
+        y.kwargs = kwargs
+        return y
