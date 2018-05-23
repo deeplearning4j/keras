@@ -1,7 +1,7 @@
 from keras.backend.common import floatx, epsilon
 from keras.backend.common import image_data_format
 
-from jumpy.java_classes import SameDiff, Nd4j
+from jumpy.java_classes import SameDiff, Nd4j, Transforms
 from jumpy.ndarray import array, get_context_dtype, set_context_dtype
 from jumpy.matlib import zeros as nd4j_zeros
 from jumpy.matlib import ones as nd4j_ones
@@ -18,7 +18,7 @@ from jumpy.ndarray import array, ndarray
 
 
 _INDArray_class = 'org.nd4j.linalg.api.ndarray.INDArray'
-
+_SD_class = 'org.nd4j.autodiff.samediff.SDVariable'
 
 def _is_nd4j(x):
 	return type(x).__name__ == _INDArray_class
@@ -26,6 +26,9 @@ def _is_nd4j(x):
 
 def _is_jumpy(x):
 	return type(x) == ndarray
+
+def _is_sd(x):
+    return type(x).__name__ == _SD_class
 
 '''
 Use the @op decorator over a method to automatically
@@ -78,6 +81,48 @@ def op(f):
 			return tuple(out)
 	return wrapper
 
+sd = SameDiff.create()
+_varid = -1
+def _varname():
+    _varid += 1
+    return "var" + str(_varid)
+def sdvar(x):
+    return sd.var(_varname(), x)
+
+
+# Note: sdops are super slow.. don't misuse;
+def sdop(f):
+	def wrapper(*args, **kwargs):
+		args = list(args)
+		for i, arg in enumerate(args):
+			if _is_jumpy(arg):
+				args[i] = sdvar(arg.array)
+		for k in kwargs:
+			v = kwargs[k]
+			if _is_jumpy(v):
+				kwargs[k] = sdvar(v.array)
+        
+		out = f(*args, **kwargs)
+		if _is_nd4j(out):
+			return array(out)
+        elif _is_sd(out):
+            return array(out.eval())
+		elif type(out) is list:
+			for i, v in enumerate(out):
+				if _is_nd4j(v):
+					out[i] = array(v)
+                elif _is_sd(v):
+                    out[i] = array(v.eval())
+			return out
+		elif type(out) is tuple:
+			out = list(out)
+			for i, v in enumerate(out):
+				if _is_nd4j(v):
+					out[i] = array(v)
+                elif _is_sd(v):
+                    out[i] = array(v.eval())
+ 			return tuple(out)
+	return wrapper
 
 def _to_int_shape(x):
     if x is None:
@@ -302,7 +347,10 @@ def batch_dot(x, y, axes=None):
 def transpose(x):
     return x.transpose()
 
-@op
+
+
+
+@sdop
 def gather(reference, indices):
     """Retrieves the elements of indices `indices` in the tensor `reference`.
 
@@ -313,8 +361,8 @@ def gather(reference, indices):
     # Returns
         A tensor of same type as `reference`.
     """
-    return sd.gatherNd(reference, indices)
-
+    y = sd.gatherNd(reference, indices)
+    return y
 
 # ELEMENT-WISE OPERATIONS
 
@@ -335,12 +383,12 @@ def max(x, axis=None, keepdims=False):
     """
     if axis is None:
         if keepdims:
-            return sd.reshape(sd.max(x), * [1] * ndim(x))
+            return Nd4j.max(x).reshape(* [1] * ndim(x))
         else:
-            return sd.max(x)
-    mx = sd.max(x, axis)
+            return Nd4j.max(x)
+    mx = Nd4j.max(x, axis)
     if keepdims:
-        mx = sd.expandDims(mx, axis)
+        mx = Nd4j.expandDims(mx, axis)
     return mx
 
 @op
@@ -360,12 +408,12 @@ def min(x, axis=None, keepdims=False):
     """
     if axis is None:
         if keepdims:
-            return sd.reshape(sd.min(x), * [1] * ndim(x))
+            return Nd4j.min(x).reshape(* [1] * ndim(x))
         else:
-            return sd.min(x)
-    mn = sd.min(x, axis)
+            return Nd4j.min(x)
+    mn = Nd4j.min(x, axis)
     if keepdims:
-        mn = sd.expandDims(mn, axis)
+        mn = Nd4j.expandDims(mn, axis)
     return mn
 
 @op
@@ -385,12 +433,12 @@ def sum(x, axis=None, keepdims=False):
     """
     if axis is None:
         if keepdims:
-            return sd.reshape(sd.sum(x), * [1] * ndim(x))
+            return Nd4j.sum(x).reshape(* [1] * ndim(x))
         else:
-            return sd.sum(x)
-    s = sd.sum(x, axis)
+            return Nd4j.sum(x)
+    s = Nd4j.sum(x, axis)
     if keepdims:
-        s = sd.expandDims(s, axis)
+        s = Nd4j.expandDims(s, axis)
     return s
 
 @op
@@ -410,12 +458,12 @@ def prod(x, axis=None, keepdims=False):
     """
     if axis is None:
         if keepdims:
-            return sd.reshape(sd.prod(x), * [1] * ndim(x))
+            return Nd4j.prod(x).reshape(* [1] * ndim(x))
         else:
-            return sd.prod(x)
-    p = sd.prod(x, axis)
+            return Nd4j.prod(x)
+    p = Nd4j.prod(x, axis)
     if keepdims:
-        p = sd.expandDims(p, axis)
+        p = Nd4j.expandDims(s, axis)
     return p
 
 
@@ -430,7 +478,7 @@ def cumsum(x, axis=0):
     # Returns
         A tensor of the cumulative sum of values of `x` along `axis`.
     """
-    return sd.cumsum(x, False, False, axis)
+    return Nd4j.cumsum(x, axis)
 
 @op
 def cumprod(x, axis=0):
@@ -443,7 +491,7 @@ def cumprod(x, axis=0):
     # Returns
         A tensor of the cumulative product of values of `x` along `axis`.
     """
-    return sd.cumprod(x, False, False, axis)
+    return Nd4j.cumprod(x, axis)
 
 @op
 def var(x, axis=None, keepdims=False):
@@ -460,14 +508,14 @@ def var(x, axis=None, keepdims=False):
     # Returns
         A tensor with the variance of elements of `x`.
     """
-
     if axis is None:
-        axis = [i for i in range(ndim(x))]
-    elif type(axis) is int:
-        axis = [axis]
-    v = sd.variance(x, False, *axis)
+        if keepdims:
+            return Nd4j.var(x).reshape(* [1] * ndim(x))
+        else:
+            return Nd4j.var(x)
+    v = Nd4j.var(x, axis)
     if keepdims:
-        v = sd.expandDims(v, axis)
+        v = Nd4j.expandDims(s, axis)
     return v
 
 @op
@@ -486,13 +534,14 @@ def std(x, axis=None, keepdims=False):
         A tensor with the standard deviation of elements of `x`.
     """
     if axis is None:
-        axis = [i for i in range(ndim(x))]
-    elif type(axis) is int:
-        axis = [axis]
-    v = sd.standardDeviation(x, False, *axis)
+        if keepdims:
+            return Nd4j.std(x).reshape(* [1] * ndim(x))
+        else:
+            return Nd4j.std(x)
+    s = Nd4j.var(x, axis)
     if keepdims:
-        v = sd.expandDims(v, axis)
-    return v
+        s = Nd4j.expandDims(s, axis)
+    return s
 
 @op
 def mean(x, axis=None, keepdims=False):
@@ -510,13 +559,13 @@ def mean(x, axis=None, keepdims=False):
         A tensor with the mean of elements of `x`.
     """
     if axis is None:
-        m = sd.mean(x)
         if keepdims:
-            return sd.reshape(m, * [1] * ndim(x))
-        return m
-    m = sd.mean(x, axis)
+            return Nd4j.mean(x).reshape(* [1] * ndim(x))
+        else:
+            return Nd4j.mean(x)
+    m = Nd4j.mean(x, axis)
     if keepdims:
-        m = sd.expandDims(m, axis)
+        m = Nd4j.expandDims(s, axis)
     return m
 
 @op
@@ -560,7 +609,7 @@ def argmax(x, axis=-1):
     """
     if axis < 0:
         axis += ndim(x)
-    return sd.argmax(x, axis)
+    return Nd4j.argMax(x, axis)
 
 @op
 def argmin(x, axis=-1):
@@ -575,7 +624,7 @@ def argmin(x, axis=-1):
     """
     if axis < 0:
         axis += ndim(x)
-    return sd.argmax(x, axis)
+    return Nd4j.argmin(x, axis)
 
 @op
 def square(x):
@@ -587,7 +636,7 @@ def square(x):
     # Returns
         A tensor.
     """
-    return sd.square(x)
+    return x.mul(x)
 
 @op
 def abs(x):
@@ -599,7 +648,7 @@ def abs(x):
     # Returns
         A tensor.
     """
-    return sd.abs(x)
+    return Transforms.abs(x)
 
 @op
 def sqrt(x):
@@ -611,7 +660,7 @@ def sqrt(x):
     # Returns
         A tensor.
     """
-    return sd.sqrt(x)
+    return Transforms.sqrt(x)
 
 
 @op
@@ -624,7 +673,7 @@ def exp(x):
     # Returns
         A tensor.
     """
-    return sd.exp(x)
+    return Transforms.exp(x)
 
 @op
 def log(x):
@@ -636,7 +685,7 @@ def log(x):
     # Returns
         A tensor.
     """
-    return sd.log(x)
+    return Transforms.log(x)
 
 @op
 def logsumexp(x, axis=None, keepdims=False):
@@ -671,7 +720,7 @@ def round(x):
     # Returns
         A tensor.
     """
-    return sd.round(x)
+    return Transforms.round(x)
 
 @op
 def sign(x):
@@ -683,7 +732,7 @@ def sign(x):
     # Returns
         A tensor.
     """
-    return sd.sign(x)
+    return Transforms.sign(x)
 
 
 @op
@@ -697,7 +746,7 @@ def pow(x, a):
     # Returns
         A tensor.
     """
-    return sd.pow(x, a)
+    return Transforms.pow(x, a)
 
 @op
 def clip(x, min_value, max_value):
@@ -711,13 +760,15 @@ def clip(x, min_value, max_value):
     # Returns
         A tensor.
     """
+    sd = SameDiff.create()  # clip not available in Nd4j
     if max_value is not None and max_value < min_value:
         max_value = min_value
     if max_value is None:
         max_value = np.inf
-    return sd.clipByValue(x, min_value, max_value)
+    x = sdvar(x)
+    return sd.clipByValue(x, min_value, max_value).eval()
 
-@op
+@sdop
 def equal(x, y):
     """Element-wise equality between two tensors.
 
