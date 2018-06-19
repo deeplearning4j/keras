@@ -10,9 +10,9 @@ from keras import optimizers
 from keras import initializers
 from keras import callbacks
 from keras.models import Sequential, Model
-from keras.layers import Input, Dense, Dropout, add
+from keras.layers import Input, Dense, Dropout, add, dot, Lambda
 from keras.layers.convolutional import Conv2D
-from keras.layers.pooling import MaxPooling2D, GlobalAveragePooling2D
+from keras.layers.pooling import MaxPooling2D, GlobalAveragePooling1D, GlobalAveragePooling2D
 from keras.utils.test_utils import get_test_data
 from keras.utils.test_utils import keras_test
 from keras import backend as K
@@ -510,17 +510,19 @@ def test_TensorBoard(tmpdir):
                   metrics=['accuracy'])
 
     # we must generate new callbacks for each test, as they aren't stateless
-    def callbacks_factory(histogram_freq):
+    def callbacks_factory(histogram_freq, embeddings_freq=1):
         return [callbacks.TensorBoard(log_dir=filepath,
                                       histogram_freq=histogram_freq,
                                       write_images=True, write_grads=True,
-                                      embeddings_freq=1,
+                                      embeddings_freq=embeddings_freq,
                                       embeddings_layer_names=['dense_1'],
+                                      embeddings_data=X_test,
                                       batch_size=5)]
 
     # fit without validation data
     model.fit(X_train, y_train, batch_size=batch_size,
-              callbacks=callbacks_factory(histogram_freq=0), epochs=3)
+              callbacks=callbacks_factory(histogram_freq=0, embeddings_freq=0),
+              epochs=3)
 
     # fit with validation data and accuracy
     model.fit(X_train, y_train, batch_size=batch_size,
@@ -529,7 +531,8 @@ def test_TensorBoard(tmpdir):
 
     # fit generator without validation data
     model.fit_generator(data_generator(True), len(X_train), epochs=2,
-                        callbacks=callbacks_factory(histogram_freq=0))
+                        callbacks=callbacks_factory(histogram_freq=0,
+                                                    embeddings_freq=0))
 
     # fit generator with validation data and accuracy
     model.fit_generator(data_generator(True), len(X_train), epochs=2,
@@ -584,12 +587,13 @@ def test_TensorBoard_histogram_freq_must_have_validation_data(tmpdir):
                   metrics=['accuracy'])
 
     # we must generate new callbacks for each test, as they aren't stateless
-    def callbacks_factory(histogram_freq):
+    def callbacks_factory(histogram_freq, embeddings_freq=1):
         return [callbacks.TensorBoard(log_dir=filepath,
                                       histogram_freq=histogram_freq,
                                       write_images=True, write_grads=True,
-                                      embeddings_freq=1,
+                                      embeddings_freq=embeddings_freq,
                                       embeddings_layer_names=['dense_1'],
+                                      embeddings_data=X_test,
                                       batch_size=5)]
 
     # fit without validation data should raise ValueError if histogram_freq > 0
@@ -623,7 +627,7 @@ def test_TensorBoard_multi_input_output(tmpdir):
     (X_train, y_train), (X_test, y_test) = get_test_data(
         num_train=train_samples,
         num_test=test_samples,
-        input_shape=(input_dim,),
+        input_shape=(input_dim, input_dim),
         classification=True,
         num_classes=num_classes)
     y_test = np_utils.to_categorical(y_test)
@@ -646,10 +650,13 @@ def test_TensorBoard_multi_input_output(tmpdir):
             i += 1
             i = i % max_batch_index
 
-    inp1 = Input((input_dim,))
-    inp2 = Input((input_dim,))
-    inp = add([inp1, inp2])
-    hidden = Dense(num_hidden, activation='relu')(inp)
+    inp1 = Input((input_dim, input_dim))
+    inp2 = Input((input_dim, input_dim))
+    inp_3d = add([inp1, inp2])
+    inp_2d = GlobalAveragePooling1D()(inp_3d)
+    inp_pair = Lambda(lambda x: x)([inp_3d, inp_2d])  # test a layer with a list of output tensors
+    hidden = dot(inp_pair, axes=-1)
+    hidden = Dense(num_hidden, activation='relu')(hidden)
     hidden = Dropout(0.1)(hidden)
     output1 = Dense(num_classes, activation='softmax')(hidden)
     output2 = Dense(num_classes, activation='softmax')(hidden)
@@ -659,17 +666,19 @@ def test_TensorBoard_multi_input_output(tmpdir):
                   metrics=['accuracy'])
 
     # we must generate new callbacks for each test, as they aren't stateless
-    def callbacks_factory(histogram_freq):
+    def callbacks_factory(histogram_freq, embeddings_freq=1):
         return [callbacks.TensorBoard(log_dir=filepath,
                                       histogram_freq=histogram_freq,
                                       write_images=True, write_grads=True,
-                                      embeddings_freq=1,
+                                      embeddings_freq=embeddings_freq,
                                       embeddings_layer_names=['dense_1'],
+                                      embeddings_data=[X_test] * 2,
                                       batch_size=5)]
 
     # fit without validation data
     model.fit([X_train] * 2, [y_train] * 2, batch_size=batch_size,
-              callbacks=callbacks_factory(histogram_freq=0), epochs=3)
+              callbacks=callbacks_factory(histogram_freq=0, embeddings_freq=0),
+              epochs=3)
 
     # fit with validation data and accuracy
     model.fit([X_train] * 2, [y_train] * 2, batch_size=batch_size,
@@ -678,7 +687,8 @@ def test_TensorBoard_multi_input_output(tmpdir):
 
     # fit generator without validation data
     model.fit_generator(data_generator(True), len(X_train), epochs=2,
-                        callbacks=callbacks_factory(histogram_freq=0))
+                        callbacks=callbacks_factory(histogram_freq=0,
+                                                    embeddings_freq=0))
 
     # fit generator with validation data and accuracy
     model.fit_generator(data_generator(True), len(X_train), epochs=2,

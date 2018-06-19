@@ -423,7 +423,6 @@ To reset the states accumulated:
 Example:
 
 ```python
-
 x  # this is our input data, of shape (32, 21, 16)
 # we will feed it to our model in sequences of length 10
 
@@ -446,7 +445,7 @@ model.reset_states()
 model.layers[0].reset_states()
 ```
 
-Notes that the methods `predict`, `fit`, `train_on_batch`, `predict_classes`, etc. will *all* update the states of the stateful layers in a model. This allows you to do not only stateful training, but also stateful prediction.
+Note that the methods `predict`, `fit`, `train_on_batch`, `predict_classes`, etc. will *all* update the states of the stateful layers in a model. This allows you to do not only stateful training, but also stateful prediction.
 
 ---
 
@@ -603,6 +602,8 @@ K.set_session(sess)
 
 # Rest of code follows ...
 ```
+
+---
 
 ### How can I install HDF5 or h5py to save my models in Keras?
 

@@ -175,8 +175,8 @@ class SGD(Optimizer):
 
         lr = self.lr
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * K.cast(self.iterations,
-                                                  K.dtype(self.decay))))
+            lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
+                                                      K.dtype(self.decay))))
         # momentum
         shapes = [K.int_shape(p) for p in params]
         moments = [K.zeros(shape) for shape in shapes]
@@ -248,8 +248,8 @@ class RMSprop(Optimizer):
 
         lr = self.lr
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * K.cast(self.iterations,
-                                                  K.dtype(self.decay))))
+            lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
+                                                      K.dtype(self.decay))))
 
         for p, g, a in zip(params, grads, accumulators):
             # update accumulator
@@ -276,11 +276,16 @@ class RMSprop(Optimizer):
 class Adagrad(Optimizer):
     """Adagrad optimizer.
 
+    Adagrad is an optimizer with parameter-specific learning rates,
+    which are adapted relative to how frequently a parameter gets
+    updated during training. The more updates a parameter receives,
+    the smaller the updates.
+
     It is recommended to leave the parameters of this optimizer
     at their default values.
 
     # Arguments
-        lr: float >= 0. Learning rate.
+        lr: float >= 0. Initial learning rate.
         epsilon: float >= 0. If `None`, defaults to `K.epsilon()`.
         decay: float >= 0. Learning rate decay over each update.
 
@@ -309,8 +314,8 @@ class Adagrad(Optimizer):
 
         lr = self.lr
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * K.cast(self.iterations,
-                                                  K.dtype(self.decay))))
+            lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
+                                                      K.dtype(self.decay))))
 
         for p, g, a in zip(params, grads, accumulators):
             new_a = a + K.square(g)  # update accumulator
@@ -335,15 +340,24 @@ class Adagrad(Optimizer):
 class Adadelta(Optimizer):
     """Adadelta optimizer.
 
+    Adadelta is a more robust extension of Adagrad
+    that adapts learning rates based on a moving window of gradient updates,
+    instead of accumulating all past gradients. This way, Adadelta continues
+    learning even when many updates have been done. Compared to Adagrad, in the
+    original version of Adadelta you don't have to set an initial learning
+    rate. In this version, initial learning rate and decay factor can
+    be set, as in most other Keras optimizers.
+
     It is recommended to leave the parameters of this optimizer
     at their default values.
 
     # Arguments
-        lr: float >= 0. Learning rate.
+        lr: float >= 0. Initial learning rate, defaults to 1.
             It is recommended to leave it at the default value.
-        rho: float >= 0.
+        rho: float >= 0. Adadelta decay factor, corresponding to fraction of
+            gradient to keep at each time step.
         epsilon: float >= 0. Fuzz factor. If `None`, defaults to `K.epsilon()`.
-        decay: float >= 0. Learning rate decay over each update.
+        decay: float >= 0. Initial learning rate decay.
 
     # References
         - [Adadelta - an adaptive learning rate method](http://arxiv.org/abs/1212.5701)
@@ -373,8 +387,8 @@ class Adadelta(Optimizer):
 
         lr = self.lr
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * K.cast(self.iterations,
-                                                  K.dtype(self.decay))))
+            lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
+                                                      K.dtype(self.decay))))
 
         for p, g, a, d_a in zip(params, grads, accumulators, delta_accumulators):
             # update accumulator
@@ -447,8 +461,8 @@ class Adam(Optimizer):
 
         lr = self.lr
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * K.cast(self.iterations,
-                                                  K.dtype(self.decay))))
+            lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
+                                                      K.dtype(self.decay))))
 
         t = K.cast(self.iterations, K.floatx()) + 1
         lr_t = lr * (K.sqrt(1. - K.pow(self.beta_2, t)) /
@@ -531,8 +545,8 @@ class Adamax(Optimizer):
 
         lr = self.lr
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * K.cast(self.iterations,
-                                                  K.dtype(self.decay))))
+            lr = lr * (1. / (1. + self.decay * K.cast(self.iterations,
+                                                      K.dtype(self.decay))))
 
         t = K.cast(self.iterations, K.floatx()) + 1
         lr_t = lr / (1. - K.pow(self.beta_1, t))

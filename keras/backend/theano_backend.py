@@ -28,6 +28,7 @@ from .common import set_image_dim_ordering, image_dim_ordering
 py_all = all
 py_any = any
 py_sum = sum
+py_slice = slice
 
 
 # INTERNAL UTILS
@@ -584,7 +585,26 @@ def var(x, axis=None, keepdims=False):
 def any(x, axis=None, keepdims=False):
     """Bitwise reduction (logical OR).
     """
-    return T.any(x, axis=axis, keepdims=keepdims)
+    y = T.any(x, axis=axis, keepdims=keepdims)
+    if hasattr(x, '_keras_shape'):
+        if axis is None:
+            y._keras_shape = (1,) * len(x._keras_shape) if keepdims else (1,)
+        else:
+            if isinstance(axis, int):
+                axis_list = [axis]
+            else:
+                axis_list = list(set(int(a) for a in axis))
+            keras_shape_list = list(x._keras_shape)
+            if keepdims:
+                for a in axis_list:
+                    keras_shape_list[a] = 1
+            else:
+                for a in axis_list[::-1]:
+                    keras_shape_list.pop(a)
+                if not keras_shape_list:
+                    keras_shape_list = (1,)
+            y._keras_shape = tuple(keras_shape_list)
+    return y
 
 
 def all(x, axis=None, keepdims=False):
@@ -670,7 +690,12 @@ def equal(x, y):
 
 
 def not_equal(x, y):
-    return T.neq(x, y)
+    z = T.neq(x, y)
+    if hasattr(x, '_keras_shape'):
+        z._keras_shape = x._keras_shape
+    elif hasattr(y, '_keras_shape'):
+        z._keras_shape = y._keras_shape
+    return z
 
 
 def greater(x, y):
@@ -730,7 +755,7 @@ def normalize_batch_in_training(x, gamma, beta,
     return normed, mean, T.inv(stdinv ** 2)
 
 
-def batch_normalization(x, mean, var, beta, gamma, epsilon=1e-3):
+def batch_normalization(x, mean, var, beta, gamma, axis=-1, epsilon=1e-3):
     """Apply batch normalization on x given mean, var, beta and gamma.
     """
     # TODO remove this if statement when Theano without
@@ -867,13 +892,12 @@ def concatenate(tensors, axis=-1):
 
 def reshape(x, shape):
     y = T.reshape(x, shape)
-    if _is_explicit_shape(shape):
-        shape = tuple(x if x != -1 else None for x in shape)
-        y._keras_shape = shape
-        if hasattr(x, '_uses_learning_phase'):
-            y._uses_learning_phase = x._uses_learning_phase
-        else:
-            y._uses_learning_phase = False
+    shape = tuple(x if isinstance(x, int) and x > 0 else None for x in shape)
+    y._keras_shape = shape
+    if hasattr(x, '_uses_learning_phase'):
+        y._uses_learning_phase = x._uses_learning_phase
+    else:
+        y._uses_learning_phase = False
     return y
 
 
@@ -1103,10 +1127,10 @@ def spatial_2d_padding(x, padding=((1, 1), (1, 1)), data_format=None):
                         input_shape[2] + top_pad + bottom_pad,
                         input_shape[3] + left_pad + right_pad)
         output = T.zeros(output_shape)
-        indices = (slice(None),
-                   slice(None),
-                   slice(top_pad, input_shape[2] + top_pad),
-                   slice(left_pad, input_shape[3] + left_pad))
+        indices = (py_slice(None),
+                   py_slice(None),
+                   py_slice(top_pad, input_shape[2] + top_pad),
+                   py_slice(left_pad, input_shape[3] + left_pad))
 
     else:
         output_shape = (input_shape[0],
@@ -1114,10 +1138,10 @@ def spatial_2d_padding(x, padding=((1, 1), (1, 1)), data_format=None):
                         input_shape[2] + left_pad + right_pad,
                         input_shape[3])
         output = T.zeros(output_shape)
-        indices = (slice(None),
-                   slice(top_pad, input_shape[1] + top_pad),
-                   slice(left_pad, input_shape[2] + left_pad),
-                   slice(None))
+        indices = (py_slice(None),
+                   py_slice(top_pad, input_shape[1] + top_pad),
+                   py_slice(left_pad, input_shape[2] + left_pad),
+                   py_slice(None))
     y = T.set_subtensor(output[indices], x)
     y._keras_shape = output_shape
     return y
@@ -1140,11 +1164,11 @@ def spatial_3d_padding(x, padding=((1, 1), (1, 1), (1, 1)), data_format=None):
                         input_shape[3] + padding[1][0] + padding[1][1],
                         input_shape[4] + padding[2][0] + padding[2][1])
         output = T.zeros(output_shape)
-        indices = (slice(None),
-                   slice(None),
-                   slice(padding[0][0], input_shape[2] + padding[0][0]),
-                   slice(padding[1][0], input_shape[3] + padding[1][0]),
-                   slice(padding[2][0], input_shape[4] + padding[2][0]))
+        indices = (py_slice(None),
+                   py_slice(None),
+                   py_slice(padding[0][0], input_shape[2] + padding[0][0]),
+                   py_slice(padding[1][0], input_shape[3] + padding[1][0]),
+                   py_slice(padding[2][0], input_shape[4] + padding[2][0]))
 
     else:
         output_shape = (input_shape[0],
@@ -1153,11 +1177,11 @@ def spatial_3d_padding(x, padding=((1, 1), (1, 1), (1, 1)), data_format=None):
                         input_shape[3] + padding[2][0] + padding[2][1],
                         input_shape[4])
         output = T.zeros(output_shape)
-        indices = (slice(None),
-                   slice(padding[0][0], input_shape[1] + padding[0][0]),
-                   slice(padding[1][0], input_shape[2] + padding[1][0]),
-                   slice(padding[2][0], input_shape[3] + padding[2][0]),
-                   slice(None))
+        indices = (py_slice(None),
+                   py_slice(padding[0][0], input_shape[1] + padding[0][0]),
+                   py_slice(padding[1][0], input_shape[2] + padding[1][0]),
+                   py_slice(padding[2][0], input_shape[3] + padding[2][0]),
+                   py_slice(None))
     return T.set_subtensor(output[indices], x)
 
 
@@ -1182,8 +1206,12 @@ def reverse(x, axes):
     """
     if isinstance(axes, int):
         axes = [axes]
-    slices = [slice(None, None, -1) if i in axes else slice(None, None, None) for i in range(x.ndim)]
+    slices = [py_slice(None, None, -1) if i in axes else py_slice(None, None, None) for i in range(x.ndim)]
     return x[slices]
+
+
+def slice(x, start, size):
+    raise NotImplementedError
 
 
 def pattern_broadcast(x, broadcastable):
@@ -1295,7 +1323,7 @@ def rnn(step_function, inputs, initial_states,
                 states: List of tensors.
             Returns:
                 outputs: Tensor with shape (samples, ...) (no time dimension),
-                new_states: Tist of tensors, same length and shapes
+                new_states: List of tensors, same length and shapes
                     as 'states'.
         inputs: Tensor of temporal data of shape (samples, time, ...)
             (at least 3D).
@@ -1591,7 +1619,20 @@ def softsign(x):
     return T_softsign(x)
 
 
-def categorical_crossentropy(target, output, from_logits=False):
+def categorical_crossentropy(target, output, from_logits=False, axis=-1):
+    output_dimensions = list(range(len(int_shape(output))))
+    if axis != -1 and axis not in output_dimensions:
+        raise ValueError(
+            '{}{}{}'.format(
+                'Unexpected channels axis {}. '.format(axis),
+                'Expected to be -1 or one of the axes of `output`, ',
+                'which has {} dimensions.'.format(len(int_shape(output)))))
+    # If the channels are not in the last axis, move them to be there:
+    if axis != -1 and axis != output_dimensions[-1]:
+        permutation = output_dimensions[:axis]
+        permutation += output_dimensions[axis + 1:] + [axis]
+        output = permute_dimensions(output, permutation)
+        target = permute_dimensions(target, permutation)
     if from_logits:
         output = T.nnet.softmax(output)
     else:
@@ -1602,11 +1643,24 @@ def categorical_crossentropy(target, output, from_logits=False):
     return T.nnet.categorical_crossentropy(output, target)
 
 
-def sparse_categorical_crossentropy(target, output, from_logits=False):
+def sparse_categorical_crossentropy(target, output, from_logits=False, axis=-1):
+    output_dimensions = list(range(len(int_shape(output))))
+    if axis != -1 and axis not in output_dimensions:
+        raise ValueError(
+            '{}{}{}'.format(
+                'Unexpected channels axis {}. '.format(axis),
+                'Expected to be -1 or one of the axes of `output`, ',
+                'which has {} dimensions.'.format(len(int_shape(output)))))
+    # If the channels are not in the last axis, move them to be there:
+    if axis != -1 and axis != output_dimensions[-1]:
+        permutation = output_dimensions[:axis]
+        permutation += output_dimensions[axis + 1:] + [axis]
+        output = permute_dimensions(output, permutation)
+        target = permute_dimensions(target, permutation)
     target = T.cast(T.flatten(target), 'int32')
     target = T.extra_ops.to_one_hot(target, nb_class=output.shape[-1])
     target = reshape(target, shape(output))
-    return categorical_crossentropy(target, output, from_logits)
+    return categorical_crossentropy(target, output, from_logits, axis=-1)
 
 
 def binary_crossentropy(target, output, from_logits=False):
@@ -1731,6 +1785,17 @@ def _preprocess_conv2d_kernel(kernel, data_format):
     return kernel
 
 
+def _preprocess_conv2d_depthwise_kernel(kernel, kernel_shape, data_format):
+    # As of Keras 2.0.0, all kernels are normalized
+    # on the format `(rows, cols, input_depth, depth)`,
+    # independently of `data_format`.
+    # Theano expects `(input_depth * depth, 1, rows, cols)` for depthwise convolution.
+    kernel = kernel[::-1, ::-1, :, :]
+    kernel = kernel.dimshuffle((2, 3, 0, 1))
+    kernel = reshape(kernel, kernel_shape)
+    return kernel
+
+
 def _preprocess_conv3d_kernel(kernel, data_format):
     # As of Keras 2.0.0, all kernels are normalized
     # on the format `(space, input_depth, depth)`,
@@ -1793,6 +1858,21 @@ def _preprocess_conv2d_filter_shape(filter_shape, data_format):
             return None
     if filter_shape:
         filter_shape = (filter_shape[3], filter_shape[2],
+                        filter_shape[0], filter_shape[1])
+    if filter_shape is not None:
+        filter_shape = tuple(int_or_none(v) for v in filter_shape)
+    return filter_shape
+
+
+def _preprocess_conv2d_depthwise_filter_shape(filter_shape, data_format):
+    # Theano might not accept long type
+    def int_or_none(value):
+        try:
+            return int(value)
+        except TypeError:
+            return None
+    if filter_shape:
+        filter_shape = (filter_shape[3] * filter_shape[2], 1,
                         filter_shape[0], filter_shape[1])
     if filter_shape is not None:
         filter_shape = tuple(int_or_none(v) for v in filter_shape)
@@ -2032,23 +2112,16 @@ def separable_conv1d(x, depthwise_kernel, pointwise_kernel, strides=1,
     depthwise_kernel_shape = int_shape(depthwise_kernel)
     if depthwise_kernel_shape is None:
         depthwise_kernel_shape = depthwise_kernel.eval().shape  # in case of a shared variable
-    depthwise_kernel_shape = _preprocess_conv2d_filter_shape(depthwise_kernel_shape, data_format)
+    depthwise_kernel_shape = _preprocess_conv2d_depthwise_filter_shape(depthwise_kernel_shape, data_format)
     pointwise_kernel_shape = int_shape(pointwise_kernel)
     if pointwise_kernel_shape is None:
         pointwise_kernel_shape = pointwise_kernel.eval().shape  # in case of a shared variable
     pointwise_kernel_shape = _preprocess_conv2d_filter_shape(pointwise_kernel_shape, data_format)
 
     x = _preprocess_conv2d_input(x, data_format)
-    depthwise_kernel = _preprocess_conv2d_kernel(depthwise_kernel, data_format)
+    depthwise_kernel = _preprocess_conv2d_depthwise_kernel(depthwise_kernel, depthwise_kernel_shape, data_format)
     pointwise_kernel = _preprocess_conv2d_kernel(pointwise_kernel, data_format)
     th_padding = _preprocess_padding(padding)
-
-    input_depth = depthwise_kernel_shape[1]
-    output_depth = depthwise_kernel_shape[0]
-    depthwise_kernel_shape = (input_depth * output_depth, 1) + depthwise_kernel_shape[2:]
-    depthwise_kernel = depthwise_kernel.dimshuffle((1, 0, 2, 3))
-    depthwise_kernel = reshape(depthwise_kernel, depthwise_kernel_shape)
-    depthwise_kernel = depthwise_kernel[:, :, ::-1, ::-1]
 
     conv_out = T.nnet.conv2d(x, depthwise_kernel,
                              border_mode=th_padding,
@@ -2056,7 +2129,7 @@ def separable_conv1d(x, depthwise_kernel, pointwise_kernel, strides=1,
                              input_shape=image_shape,
                              filter_shape=depthwise_kernel_shape,
                              filter_dilation=dilation_rate,
-                             num_groups=input_depth)
+                             num_groups=image_shape[1])
     conv_out = T.nnet.conv2d(conv_out, pointwise_kernel,
                              border_mode=th_padding,
                              subsample=(1, 1),
@@ -2099,23 +2172,16 @@ def separable_conv2d(x, depthwise_kernel, pointwise_kernel, strides=(1, 1),
     depthwise_kernel_shape = int_shape(depthwise_kernel)
     if depthwise_kernel_shape is None:
         depthwise_kernel_shape = depthwise_kernel.eval().shape  # in case of a shared variable
-    depthwise_kernel_shape = _preprocess_conv2d_filter_shape(depthwise_kernel_shape, data_format)
+    depthwise_kernel_shape = _preprocess_conv2d_depthwise_filter_shape(depthwise_kernel_shape, data_format)
     pointwise_kernel_shape = int_shape(pointwise_kernel)
     if pointwise_kernel_shape is None:
         pointwise_kernel_shape = pointwise_kernel.eval().shape  # in case of a shared variable
     pointwise_kernel_shape = _preprocess_conv2d_filter_shape(pointwise_kernel_shape, data_format)
 
     x = _preprocess_conv2d_input(x, data_format)
-    depthwise_kernel = _preprocess_conv2d_kernel(depthwise_kernel, data_format)
+    depthwise_kernel = _preprocess_conv2d_depthwise_kernel(depthwise_kernel, depthwise_kernel_shape, data_format)
     pointwise_kernel = _preprocess_conv2d_kernel(pointwise_kernel, data_format)
     th_padding = _preprocess_padding(padding)
-
-    input_depth = depthwise_kernel_shape[1]
-    output_depth = depthwise_kernel_shape[0]
-    depthwise_kernel_shape = (input_depth * output_depth, 1) + depthwise_kernel_shape[2:]
-    depthwise_kernel = depthwise_kernel.dimshuffle((1, 0, 2, 3))
-    depthwise_kernel = reshape(depthwise_kernel, depthwise_kernel_shape)
-    depthwise_kernel = depthwise_kernel[:, :, ::-1, ::-1]
 
     conv_out = T.nnet.conv2d(x, depthwise_kernel,
                              border_mode=th_padding,
@@ -2123,7 +2189,7 @@ def separable_conv2d(x, depthwise_kernel, pointwise_kernel, strides=(1, 1),
                              input_shape=image_shape,
                              filter_shape=depthwise_kernel_shape,
                              filter_dilation=dilation_rate,
-                             num_groups=input_depth)
+                             num_groups=image_shape[1])
     conv_out = T.nnet.conv2d(conv_out, pointwise_kernel,
                              border_mode=th_padding,
                              subsample=(1, 1),
@@ -2164,18 +2230,11 @@ def depthwise_conv2d(x, depthwise_kernel, strides=(1, 1), padding='valid',
     depthwise_kernel_shape = int_shape(depthwise_kernel)
     if depthwise_kernel_shape is None:
         depthwise_kernel_shape = depthwise_kernel.eval().shape  # in case of a shared variable
-    depthwise_kernel_shape = _preprocess_conv2d_filter_shape(depthwise_kernel_shape, data_format)
+    depthwise_kernel_shape = _preprocess_conv2d_depthwise_filter_shape(depthwise_kernel_shape, data_format)
 
     x = _preprocess_conv2d_input(x, data_format)
-    depthwise_kernel = _preprocess_conv2d_kernel(depthwise_kernel, data_format)
+    depthwise_kernel = _preprocess_conv2d_depthwise_kernel(depthwise_kernel, depthwise_kernel_shape, data_format)
     th_padding = _preprocess_padding(padding)
-
-    input_depth = depthwise_kernel_shape[1]
-    output_depth = depthwise_kernel_shape[0]
-    depthwise_kernel_shape = (input_depth * output_depth, 1) + depthwise_kernel_shape[2:]
-    depthwise_kernel = depthwise_kernel.dimshuffle((1, 0, 2, 3))
-    depthwise_kernel = reshape(depthwise_kernel, depthwise_kernel_shape)
-    depthwise_kernel = depthwise_kernel[:, :, ::-1, ::-1]
 
     conv_out = T.nnet.conv2d(x, depthwise_kernel,
                              border_mode=th_padding,
@@ -2183,7 +2242,7 @@ def depthwise_conv2d(x, depthwise_kernel, strides=(1, 1), padding='valid',
                              input_shape=image_shape,
                              filter_shape=depthwise_kernel_shape,
                              filter_dilation=dilation_rate,
-                             num_groups=input_depth)
+                             num_groups=image_shape[1])
     conv_out = _postprocess_conv2d_output(conv_out, x, padding,
                                           depthwise_kernel_shape, strides, data_format)
     return conv_out
@@ -2653,8 +2712,8 @@ def local_conv1d(inputs, kernel, kernel_size, strides, data_format=None):
 
     xs = []
     for i in range(output_length):
-        slice_length = slice(i * stride,
-                             i * stride + kernel_size[0])
+        slice_length = py_slice(i * stride,
+                                i * stride + kernel_size[0])
         xs.append(reshape(inputs[:, slice_length, :],
                           (1, -1, feature_dim)))
     x_aggregate = concatenate(xs, axis=0)
@@ -2678,10 +2737,10 @@ def local_conv2d(inputs, kernel, kernel_size, strides, output_shape, data_format
         output = []
         for i in range(output_row):
             for j in range(output_col):
-                slice_row = slice(i * stride_row,
-                                  i * stride_row + kernel_size[0])
-                slice_col = slice(j * stride_col,
-                                  j * stride_col + kernel_size[1])
+                slice_row = py_slice(i * stride_row,
+                                     i * stride_row + kernel_size[0])
+                slice_col = py_slice(j * stride_col,
+                                     j * stride_col + kernel_size[1])
                 x_flatten = reshape(inputs[:, :, slice_row, slice_col],
                                     (1, -1, feature_dim))
                 output.append(dot(x_flatten,
@@ -2694,10 +2753,10 @@ def local_conv2d(inputs, kernel, kernel_size, strides, output_shape, data_format
         xs = []
         for i in range(output_row):
             for j in range(output_col):
-                slice_row = slice(i * stride_row,
-                                  i * stride_row + kernel_size[0])
-                slice_col = slice(j * stride_col,
-                                  j * stride_col + kernel_size[1])
+                slice_row = py_slice(i * stride_row,
+                                     i * stride_row + kernel_size[0])
+                slice_col = py_slice(j * stride_col,
+                                     j * stride_col + kernel_size[1])
                 xs.append(reshape(inputs[:, slice_row, slice_col, :],
                                   (1, -1, feature_dim)))
 
