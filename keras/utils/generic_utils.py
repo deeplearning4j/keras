@@ -478,6 +478,10 @@ def is_all_none(iterable_or_element):
 
 
 def slice_arrays(arrays, start=None, stop=None):
+    print(type(arrays))
+    print(type(arrays[0]))
+    print(type(start))
+    print(type(stop))
     """Slices an array or list of arrays.
 
     This takes an array-like, or a list of

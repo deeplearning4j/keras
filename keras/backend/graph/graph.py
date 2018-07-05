@@ -1,32 +1,33 @@
 class Placeholder(object):
 
     def __init__(self, **kwargs):
+        self.index = None
         for k in kwargs:
             setattr(self, k, kwargs[k])
 
     def eval(self):
-        try:
+        if hasattr(self, 'op'):
+            args = list(self.args)
+            kwargs = self.kwargs
+            for i, a in enumerate(args):
+                if isinstance(a, Placeholder):
+                    args[i] = a.eval()
+            for k in kwargs:
+                v = kwargs[k]
+                if isinstance(v, Placeholder):
+                    kwargs[k] = v.eval()
+            output = self.op.f(*args, **kwargs)
+            idx = self.index
+            if idx is None:
+                self.value = output
+            else:
+                self.value = output[idx]
             return self.value
-        except AttributeError:
+        else:
             try:
-                args = list(self.ags)
-                kwargs = self.kwargs
-                for i, a in enumerate(args):
-                    if isinstance(a, Placeholder):
-                        args[i] = a.eval()
-                for k in kwargs:
-                    v = kwargs[k]
-                    if isinstance(v, Placeholder):
-                        kwargs[k] = v.eval()
-                output = self.op.f(*args, **kwargs)
-                idx = self.index
-                if idx is None:
-                    self.value = output
-                else:
-                    self.value = output[self.index]
                 return self.value
-            except AttributeError:
-                raise Exception('Uable to evaluate. No value/inputs provided.')
+            except AttributeError as ex:
+                raise Exception("Uable to evaluate. No value/inputs provided.")
 
 
     def set_value(self, value):

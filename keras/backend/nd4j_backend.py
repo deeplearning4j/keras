@@ -20,6 +20,7 @@ from jumpy.ndarray import array, ndarray
 _INDArray_class = 'org.nd4j.linalg.api.ndarray.INDArray'
 _SD_class = 'org.nd4j.autodiff.samediff.SDVariable'
 
+
 def _is_nd4j(x):
     return type(x).__name__ == _INDArray_class
 
@@ -29,6 +30,11 @@ def _is_jumpy(x):
 
 def _is_sd(x):
     return type(x).__name__ == _SD_class
+
+
+def is_tensor(x):
+    return isinstance(x, Placeholder)
+
 
 '''
 Use the @op decorator over a method to automatically
@@ -166,7 +172,7 @@ def placeholder(shape=None, ndim=None, dtype=None, sparse=False, name=None):
             shape = None
         else:
             shape = [None for _ in range(ndim)]
-    ph = Placeholder(shape=shape, name=name)
+    ph = Placeholder(name=name, _keras_shape=shape, _uses_learning_phase=False)
     return ph
 
 
@@ -218,17 +224,19 @@ def shape(x):
 def int_shape(x):
     if hasattr(x, '_keras_shape'):
         return x._keras_shape
-    try:
-        s = x.shape
-        if s is None:
-            s = x.add(0).eval().shape()
-        return [None if i < 0 else i for i in s]
-    except:
-        return None
+    if _is_nd4j(x):
+        return tuple(x.shape())
+    if _is_sd(x):
+        return tuple(x.add(0).eval().getShape())
+    if _is_jumpy(x):
+        return x.shape
 
-@op
+
 def ndim(x):
-    return len(x.shape)
+    shape = int_shape(x)
+    if shape is None:
+        return shape
+    return len(shape)
 
 
 def dtype(x):
@@ -329,6 +337,15 @@ def moving_average_update(x, value, momentum):
 
 @op
 def dot(x, y):
+    x_shape = x.shape()
+    if len(x_shape) > 2:
+        batch_dim = 1
+        for d in x_shape[:-1]:
+            batch_dim *= d
+        x = x.reshape(batch_dim, x_shape[-1])
+        z = x.mmul(y)
+        z = z.reshape(*(x_shape[:-1] + [z.shape()[-1]]))
+        return z
     return x.mmul(y)
 
 @op
@@ -1136,20 +1153,67 @@ def one_hot(indices, num_classes):
 
 
 @op
-def reverse(x, axes):
-    """Reverse a tensor along the specified axes.
+def bias_add(x, bias, data_format=None):
+    if data_format is None:
+        data_format = image_data_format()
+    if data_format not in {'channels_first', 'channels_last'}:
+        raise ValueError('Unknown data_format ' + str(data_format))
+    bias_ndim = ndim(bias)
+    x_ndim = ndim(x)
+    if bias_ndim != 1 and bias_ndim != x_ndim - 1:
+        raise ValueError('Unexpected bias dimensions %d, '
+                         'expect to be 1 or %d dimensions'
+                         % (bias_ndim, x_ndim - 1))
+    bias_shape = tuple(bias.shape())
+    if x_ndim == 5:
+        if data_format == 'channels_first':
+            if bias_ndim == 1:
+                x.addi(bias.reshape(1, bias_shape[0], 1, 1, 1))
+                #x += reshape(bias, (1, bias_shape[0], 1, 1, 1))
+            else:
+                x.addi(bias.rehsape(1, bias_shape[3], *bias_shape[:3]))
+                #x += reshape(bias, (1, bias_shape[3]) + bias_shape[:3])
+        elif data_format == 'channels_last':
+            if bias_ndim == 1:
+                x.addi(bias.reshape(1, 1, 1, 1, bias_shape[0]))
+                #x += reshape(bias, (1, 1, 1, 1, bias_shape[0]))
+            else:
+                x.addi(bias.rehsape(1, *bias_shape))
+               # x += reshape(bias, (1,) + bias_shape)
+    elif x_ndim == 4:
+        if data_format == 'channels_first':
+            if bias_ndim == 1:
+                x.addi(bias.reshape(bias, 1, bias_shape[0], 1, 1))
+                #x += reshape(bias, (1, bias_shape[0], 1, 1))
+            else:
+                x.addi(bias.reshape(1, bias_shape[2], *bias_shape[:2]))
+                #x += reshape(bias, (1, bias_shape[2]) + bias_shape[:2])
+        elif data_format == 'channels_last':
+            if ndim(bias) == 1:
+                x.addi(bias.rehsape(1, 1, 1, bias_shape[0]))
+                #x += reshape(bias, (1, 1, 1, bias_shape[0]))
+            else:
+                x.addi(bias.reshape(1, *bias_shape))
+                #x += reshape(bias, (1,) + bias_shape)
+    elif x_ndim == 3:
+        if data_format == 'channels_first':
+            if bias_ndim == 1:
+                x.addi(bias.rehsape(1, bias_shape[0], 1))
+                #x += reshape(bias, (1, bias_shape[0], 1))
+            else:
+                x.addi(bias.reshape(1, bias_shape[1], bias_shape[0]))
+                #x += reshape(bias, (1, bias_shape[1], bias_shape[0]))
+        elif data_format == 'channels_last':
+            if bias_ndim == 1:
+                x.addi(bias.reshape(1, 1, bias_shape[0]))
+                #x += reshape(bias, (1, 1, bias_shape[0]))
+            else:
+                x.addi(bias.reshape(1, *bias_shape))
+                #x += reshape(bias, (1,) + bias_shape)
+    else:
+        x.addi(bias)
+    return x
 
-    # Arguments
-        x: Tensor to reverse.
-        axes: Integer or iterable of integers.
-            Axes to reverse.
-
-    # Returns
-        A tensor.
-    """
-    if isinstance(axes, int):
-        axes = [axes]
-    return tf.reverse(x, *axes)
 
 
 ###-----------NO OPS BEYOND THIS LINE---------------###
