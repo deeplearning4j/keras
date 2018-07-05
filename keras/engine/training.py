@@ -7,7 +7,7 @@ from __future__ import print_function
 import warnings
 import copy
 import numpy as np
-
+import jumpy as jp
 from .network import Network
 from .base_layer import Layer
 from .training_utils import collect_metrics
@@ -1119,6 +1119,31 @@ class Model(Network):
                 batch_size=None,
                 verbose=0,
                 steps=None):
+        
+        ###lazy
+        if type(x) is list:
+            x = x[:]
+            for i, j in enumerate(x):
+                if K.is_numpy(j) or K.is_nd4j(j):
+                    x[i] = jp.array(j)
+                elif not K.is_jumpy(j):
+                    raise Exception("Unsupported input type : " + str(type(j)))
+        else:
+            if K.is_numpy(x) or K.is_jumpy(x):
+                x = jp.array(x)
+            elif not K.is_jumpy(x):
+                raise Exception("Unsupported input type : " + str(type(j)))
+            x = [x]
+        
+        for val, var in zip(x, self.inputs):
+            var.set_value(val)
+        
+        outputs = [o.eval() for o in self.outputs]
+        if len(outputs) == 1:
+            outputs = outputs[0]
+        return outputs
+        ###
+                
         """Generates output predictions for the input samples.
 
         Computation is done in batches.

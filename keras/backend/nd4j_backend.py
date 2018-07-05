@@ -21,14 +21,18 @@ _INDArray_class = 'org.nd4j.linalg.api.ndarray.INDArray'
 _SD_class = 'org.nd4j.autodiff.samediff.SDVariable'
 
 
-def _is_nd4j(x):
+def is_numpy(x):
+    return 'numpy' in x.__class__.__name__
+
+
+def is_nd4j(x):
     return type(x).__name__ == _INDArray_class
 
 
-def _is_jumpy(x):
+def is_jumpy(x):
     return type(x) == ndarray
 
-def _is_sd(x):
+def is_sd(x):
     return type(x).__name__ == _SD_class
 
 
@@ -65,24 +69,24 @@ def op(f):
     def wrapper(*args, **kwargs):
         args = list(args)
         for i, arg in enumerate(args):
-            if _is_jumpy(arg):
+            if is_jumpy(arg):
                 args[i] = arg.array
         for k in kwargs:
             v = kwargs[k]
-            if _is_jumpy(v):
+            if is_jumpy(v):
                 kwargs[k] = v.array
         out = f(*args, **kwargs)
-        if _is_nd4j(out):
+        if is_nd4j(out):
             return array(out)
         elif type(out) is list:
             for i, v in enumerate(out):
-                if _is_nd4j(v):
+                if is_nd4j(v):
                     out[i] = array(v)
             return out
         elif type(out) is tuple:
             out = list(out)
             for i, v in enumerate(out):
-                if _is_nd4j(v):
+                if is_nd4j(v):
                     out[i] = array(v)
             return tuple(out)
     return wrapper
@@ -101,31 +105,31 @@ def sdop(f):
     def wrapper(*args, **kwargs):
         args = list(args)
         for i, arg in enumerate(args):
-            if _is_jumpy(arg):
+            if is_jumpy(arg):
                 args[i] = sdvar(arg.array)
         for k in kwargs:
             v = kwargs[k]
-            if _is_jumpy(v):
+            if is_jumpy(v):
                 kwargs[k] = sdvar(v.array)
         
         out = f(*args, **kwargs)
-        if _is_nd4j(out):
+        if is_nd4j(out):
             return array(out)
-        elif _is_sd(out):
+        elif is_sd(out):
             return array(out.eval())
         elif type(out) is list:
             for i, v in enumerate(out):
-                if _is_nd4j(v):
+                if is_nd4j(v):
                     out[i] = array(v)
-                elif _is_sd(v):
+                elif is_sd(v):
                     out[i] = array(v.eval())
             return out
         elif type(out) is tuple:
             out = list(out)
             for i, v in enumerate(out):
-                if _is_nd4j(v):
+                if is_nd4j(v):
                     out[i] = array(v)
-                elif _is_sd(v):
+                elif is_sd(v):
                     out[i] = array(v.eval())
             return tuple(out)
     return wrapper
@@ -224,11 +228,11 @@ def shape(x):
 def int_shape(x):
     if hasattr(x, '_keras_shape'):
         return x._keras_shape
-    if _is_nd4j(x):
+    if is_nd4j(x):
         return tuple(x.shape())
-    if _is_sd(x):
+    if is_sd(x):
         return tuple(x.add(0).eval().getShape())
-    if _is_jumpy(x):
+    if is_jumpy(x):
         return x.shape
 
 
