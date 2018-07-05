@@ -20,7 +20,7 @@ python setup.py install
 ### Example
 
 
-```
+```python
 from keras.layers import *
 from keras.models import Model
 import jumpy as jp
