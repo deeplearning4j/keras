@@ -22,9 +22,11 @@ else:
         _keras_base_dir = '/tmp'
     _keras_dir = os.path.join(_keras_base_dir, '.keras')
 
-# Default backend: TensorFlow.
-_BACKEND = 'tensorflow'
+_BACKEND = 'nd4j'
+sys.stderr.write('Using nd4j backend.\n')
+from .nd4j_backend import *
 
+'''
 # Attempt to read Keras config file.
 _config_path = os.path.expanduser(os.path.join(_keras_dir, 'keras.json'))
 if os.path.exists(_config_path):
@@ -105,7 +107,7 @@ else:
         sys.stderr.write('Using ' + _BACKEND + ' backend.\n')
     except ImportError:
         raise ValueError('Unable to import backend : ' + str(_BACKEND))
-
+'''
 
 def backend():
     """Publicly accessible method

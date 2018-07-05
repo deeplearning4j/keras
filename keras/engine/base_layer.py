@@ -92,6 +92,9 @@ class Layer(object):
     """
 
     def __init__(self, **kwargs):
+        ###lazy
+        self.num_outputs = 1
+
         self.input_spec = None
         self.supports_masking = False
         self.stateful = False
@@ -457,13 +460,23 @@ class Layer(object):
 
             # Actually call the layer,
             # collecting output(s), mask(s), and shape(s).
-            output = self.call(inputs, **kwargs)
-            output_mask = self.compute_mask(inputs, previous_mask)
+            
+            ###lazy
+            op = K.graph.Op(self.call, num_outputs=self.num_outputs)
+            output = op(inputs, **kwargs)
+            mask_f = K.graph.Op(self.compute_mask, num_outputs=self.num_outputs)
+            output_mask = mask_f(inputs, previous_mask)
+
+            #output = self.call(inputs, **kwargs)
+            #output_mask = self.compute_mask(inputs, previous_mask)
 
             # If the layer returns tensors from its inputs, unmodified,
             # we copy them to avoid loss of tensor metadata.
+
+            
             output_ls = to_list(output)
             inputs_ls = to_list(inputs)
+            '''
             output_ls_copy = []
             for x in output_ls:
                 if x in inputs_ls:
@@ -473,7 +486,8 @@ class Layer(object):
                 output = output_ls_copy[0]
             else:
                 output = output_ls_copy
-
+            '''
+            
             # Inferring the output shape is only relevant for Theano.
             if all([s is not None
                     for s in to_list(input_shape)]):

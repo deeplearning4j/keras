@@ -5,7 +5,7 @@ from jumpy.java_classes import SameDiff, Nd4j, Transforms
 from jumpy.ndarray import array, get_context_dtype, set_context_dtype
 from jumpy.matlib import zeros as nd4j_zeros
 from jumpy.matlib import ones as nd4j_ones
-from .graph import Placeholder, Variable, Op
+from .graph import Placeholder, Variable, Op, Graph
 
 
 
@@ -21,11 +21,11 @@ _INDArray_class = 'org.nd4j.linalg.api.ndarray.INDArray'
 _SD_class = 'org.nd4j.autodiff.samediff.SDVariable'
 
 def _is_nd4j(x):
-	return type(x).__name__ == _INDArray_class
+    return type(x).__name__ == _INDArray_class
 
 
 def _is_jumpy(x):
-	return type(x) == ndarray
+    return type(x) == ndarray
 
 def _is_sd(x):
     return type(x).__name__ == _SD_class
@@ -38,10 +38,10 @@ take care of nd4j<->jumpy conversions. e.g:
 
 @op
 def reshape(arr, shape):
-	# we are in nd4j space now
-	# arr is an INDArray instance
-	# we return a INDArray instance as well
-	return arr.reshape(*shape)
+    # we are in nd4j space now
+    # arr is an INDArray instance
+    # we return a INDArray instance as well
+    return arr.reshape(*shape)
 
 
 # use in jumpy space:
@@ -56,30 +56,30 @@ will be automatically bound to ndarray class.
 
 '''
 def op(f):
-	def wrapper(*args, **kwargs):
-		args = list(args)
-		for i, arg in enumerate(args):
-			if _is_jumpy(arg):
-				args[i] = arg.array
-		for k in kwargs:
-			v = kwargs[k]
-			if _is_jumpy(v):
-				kwargs[k] = v.array
-		out = f(*args, **kwargs)
-		if _is_nd4j(out):
-			return array(out)
-		elif type(out) is list:
-			for i, v in enumerate(out):
-				if _is_nd4j(v):
-					out[i] = array(v)
-			return out
-		elif type(out) is tuple:
-			out = list(out)
-			for i, v in enumerate(out):
-				if _is_nd4j(v):
-					out[i] = array(v)
-			return tuple(out)
-	return wrapper
+    def wrapper(*args, **kwargs):
+        args = list(args)
+        for i, arg in enumerate(args):
+            if _is_jumpy(arg):
+                args[i] = arg.array
+        for k in kwargs:
+            v = kwargs[k]
+            if _is_jumpy(v):
+                kwargs[k] = v.array
+        out = f(*args, **kwargs)
+        if _is_nd4j(out):
+            return array(out)
+        elif type(out) is list:
+            for i, v in enumerate(out):
+                if _is_nd4j(v):
+                    out[i] = array(v)
+            return out
+        elif type(out) is tuple:
+            out = list(out)
+            for i, v in enumerate(out):
+                if _is_nd4j(v):
+                    out[i] = array(v)
+            return tuple(out)
+    return wrapper
 
 sd = SameDiff.create()
 _varid = -1
@@ -92,37 +92,37 @@ def sdvar(x):
 
 # Note: sdops are super slow.. don't misuse;
 def sdop(f):
-	def wrapper(*args, **kwargs):
-		args = list(args)
-		for i, arg in enumerate(args):
-			if _is_jumpy(arg):
-				args[i] = sdvar(arg.array)
-		for k in kwargs:
-			v = kwargs[k]
-			if _is_jumpy(v):
-				kwargs[k] = sdvar(v.array)
+    def wrapper(*args, **kwargs):
+        args = list(args)
+        for i, arg in enumerate(args):
+            if _is_jumpy(arg):
+                args[i] = sdvar(arg.array)
+        for k in kwargs:
+            v = kwargs[k]
+            if _is_jumpy(v):
+                kwargs[k] = sdvar(v.array)
         
-		out = f(*args, **kwargs)
-		if _is_nd4j(out):
-			return array(out)
+        out = f(*args, **kwargs)
+        if _is_nd4j(out):
+            return array(out)
         elif _is_sd(out):
             return array(out.eval())
-		elif type(out) is list:
-			for i, v in enumerate(out):
-				if _is_nd4j(v):
-					out[i] = array(v)
+        elif type(out) is list:
+            for i, v in enumerate(out):
+                if _is_nd4j(v):
+                    out[i] = array(v)
                 elif _is_sd(v):
                     out[i] = array(v.eval())
-			return out
-		elif type(out) is tuple:
-			out = list(out)
-			for i, v in enumerate(out):
-				if _is_nd4j(v):
-					out[i] = array(v)
+            return out
+        elif type(out) is tuple:
+            out = list(out)
+            for i, v in enumerate(out):
+                if _is_nd4j(v):
+                    out[i] = array(v)
                 elif _is_sd(v):
                     out[i] = array(v.eval())
- 			return tuple(out)
-	return wrapper
+            return tuple(out)
+    return wrapper
 
 def _to_int_shape(x):
     if x is None:
@@ -1156,16 +1156,4 @@ def reverse(x, axes):
 
 
 def function(inputs, outputs, updates=None, **kwargs):
-
-    class Function(object):
-        def __init__(self, inputs, outputs):
-            self.inputs = inputs
-            self.outputs = outputs
-
-        def __call__(self, X):
-            for i, x in zip(self.inputs, X):
-                i.associateArrayWithVariable(array(x).array)
-            return [array(o.eval()) for o in self.outputs]
-
-    return Function(inputs, outputs)
-
+    return Graph(inputs, outputs)

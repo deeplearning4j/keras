@@ -9,7 +9,8 @@ class Placeholder(object):
             return self.value
         except AttributeError:
             try:
-                ags = list(self.ags)
+                args = list(self.ags)
+                kwargs = self.kwargs
                 for i, a in enumerate(args):
                     if isinstance(a, Placeholder):
                         args[i] = a.eval()
@@ -17,7 +18,12 @@ class Placeholder(object):
                     v = kwargs[k]
                     if isinstance(v, Placeholder):
                         kwargs[k] = v.eval()
-                self.value = self.op.f(*args, **kwargs)
+                output = self.op.f(*args, **kwargs)
+                idx = self.index
+                if idx is None:
+                    self.value = output
+                else:
+                    self.value = output[self.index]
                 return self.value
             except AttributeError:
                 raise Exception('Uable to evaluate. No value/inputs provided.')
@@ -36,12 +42,37 @@ class Variable(Placeholder):
 
 class Op(object):
 
-    def __init__(self, f):
+    def __init__(self, f, num_outputs=1):
+        self.num_outputs = num_outputs
         self.f = f
 
     def __call__(self, *args, **kwargs):
-        y = Placeholder()
-        y.op = self
-        y.args = args
-        y.kwargs = kwargs
-        return y
+        if self.num_outputs == 1:
+            y = Placeholder()
+            y.op = self
+            y.args = args
+            y.kwargs = kwargs
+            y.index = None
+            return y
+        outputs = []
+        for i in range(self.num_outputs):
+            y = Placeholder()
+            y.op = self
+            y.args = args
+            y.kwargs = kwargs
+            y.index = i
+            outputs.append(y)
+        return outputs
+
+
+class Graph(object):
+
+    def __init__(self, inputs, outputs):
+        self.inputs = inputs
+        self.outputs = outputs
+
+    def __call__(self, inputs):
+        for val, ph in zip(inputs, self.inputs):
+            ph.set_value(val)
+        
+        return [o.eval() for o in self.outputs]
