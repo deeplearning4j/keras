@@ -1,7 +1,7 @@
 from keras.backend.common import floatx, epsilon
 from keras.backend.common import image_data_format
 
-from jumpy.java_classes import SameDiff, Nd4j, Transforms
+from jumpy.java_classes import SameDiff, Nd4j, Transforms, Shape
 from jumpy.ndarray import array, get_context_dtype, set_context_dtype
 from jumpy.matlib import zeros as nd4j_zeros
 from jumpy.matlib import ones as nd4j_ones
@@ -40,6 +40,9 @@ def is_tensor(x):
     return isinstance(x, Placeholder)
 
 
+
+_RET_NO_WRAP = False
+
 '''
 Use the @op decorator over a method to automatically
 take care of nd4j<->jumpy conversions. e.g:
@@ -65,17 +68,26 @@ Note that methods with first argument named 'arr'
 will be automatically bound to ndarray class.
 
 '''
+
 def op(f):
     def wrapper(*args, **kwargs):
         args = list(args)
         for i, arg in enumerate(args):
             if is_jumpy(arg):
                 args[i] = arg.array
+            elif type(arg) in (list, tuple):
+                arg = list(arg)
+                for j, a in enumerate(arg):
+                    if is_jumpy(a):
+                        arg[j] = a.array
+                args[i] = arg
         for k in kwargs:
             v = kwargs[k]
             if is_jumpy(v):
                 kwargs[k] = v.array
         out = f(*args, **kwargs)
+        if _RET_NO_WRAP:
+            return out
         if is_nd4j(out):
             return array(out)
         elif type(out) is list:
@@ -94,6 +106,7 @@ def op(f):
 sd = SameDiff.create()
 _varid = -1
 def _varname():
+    global _varid
     _varid += 1
     return "var" + str(_varid)
 def sdvar(x):
@@ -111,8 +124,11 @@ def sdop(f):
             v = kwargs[k]
             if is_jumpy(v):
                 kwargs[k] = sdvar(v.array)
-        
+        global sd
+        sd = SameDiff.create()  ## we create a new sd instance for each exec :(
         out = f(*args, **kwargs)
+        if _RET_NO_WRAP:
+            return out
         if is_nd4j(out):
             return array(out)
         elif is_sd(out):
@@ -457,9 +473,20 @@ def sum(x, axis=None, keepdims=False):
             return Nd4j.sum(x).reshape(* [1] * ndim(x))
         else:
             return Nd4j.sum(x)
+    if type(axis) in (list, tuple):
+        axes = list(axis)
+        if not keepdims:
+            axes.sort()
+            c = 1
+            for i in range(1, len(axes)):
+                axes[i] -= c
+                c += 1
+        for a in axes:
+            x = sum(x, a, keepdims).array
+        return x
     s = Nd4j.sum(x, axis)
     if keepdims:
-        s = Nd4j.expandDims(s, axis)
+        s = expand_dims(s, axis).array
     return s
 
 @op
@@ -769,7 +796,7 @@ def pow(x, a):
     """
     return Transforms.pow(x, a)
 
-@op
+@sdop
 def clip(x, min_value, max_value):
     """Element-wise value clipping.
 
@@ -789,7 +816,7 @@ def clip(x, min_value, max_value):
     x = sdvar(x)
     return sd.clipByValue(x, min_value, max_value).eval()
 
-@sdop
+@op
 def equal(x, y):
     """Element-wise equality between two tensors.
 
@@ -800,7 +827,7 @@ def equal(x, y):
     # Returns
         A bool tensor.
     """
-    return sd.eq(x, y)
+    return x.eq(y)
 
 @op
 def not_equal(x, y):
@@ -813,7 +840,7 @@ def not_equal(x, y):
     # Returns
         A bool tensor.
     """
-    return sd.neq(x, y)
+    return x.neq(y)
 
 @op
 def greater(x, y):
@@ -826,7 +853,7 @@ def greater(x, y):
     # Returns
         A bool tensor.
     """
-    return sd.gt(x, y)
+    return x.gt(y)
 
 @op
 def greater_equal(x, y):
@@ -839,7 +866,7 @@ def greater_equal(x, y):
     # Returns
         A bool tensor.
     """
-    return sd.gte(x, y)
+    return x.gte(y)
 
 @op
 def less(x, y):
@@ -852,7 +879,7 @@ def less(x, y):
     # Returns
         A bool tensor.
     """
-    return sd.lt(x, y)
+    return x.lt(y)
 
 @op
 def less_equal(x, y):
@@ -865,7 +892,7 @@ def less_equal(x, y):
     # Returns
         A bool tensor.
     """
-    return sd.lte(x, y)
+    return x.lte(y)
 
 @op
 def maximum(x, y):
@@ -878,7 +905,7 @@ def maximum(x, y):
     # Returns
         A tensor.
     """
-    return sd.max(x, y)
+    return Transforms.max(x, y)
 
 @op
 def minimum(x, y):
@@ -891,7 +918,7 @@ def minimum(x, y):
     # Returns
         A tensor.
     """
-    return sd.min(x, y)
+    return Transforms.min(x, y)
 
 @op
 def sin(x):
@@ -903,7 +930,7 @@ def sin(x):
     # Returns
         A tensor.
     """
-    return sd.sin(x)
+    return Transforms.sin(x)
 
 @op
 def cos(x):
@@ -915,7 +942,7 @@ def cos(x):
     # Returns
         A tensor.
     """
-    return sd.cos(x)
+    return Transforms.cos(x)
 
 @op
 def normalize_batch_in_training(x, gamma, beta,
@@ -943,11 +970,12 @@ def batch_normalization(x, mean, var, beta, gamma, epsilon=1e-3):
     """
     return sd.batcNorm(x, mean, var, gamma, beta)
 
+
 @op
 def concatenate(tensors, axis=-1):
     if axis < 0:
-        axis += ndim(tensors[0])
-    return sd.concat(axis, *tensors)
+        axis += len(tensors[0].shape())
+    return Nd4j.concat(axis, *tensors)
 
 @op
 def reshape(x, shape):
@@ -974,7 +1002,7 @@ def permute_dimensions(x, pattern):
     # Returns
         A tensor.
     """
-    return sd.permute(x, *pattern)
+    return x.permute(*pattern)
 
 @op
 def resize_images(x, height_factor, width_factor, data_format):
@@ -999,9 +1027,7 @@ def repeat_elements(x, rep, axis):
     # Returns
         A tensor.
     """
-    for _ in range(rep):
-        x = sd.repeat(x, axis)
-    return x
+    return x.repeat(axis, rep)
 
 @op
 def repeat(x, n):
@@ -1018,10 +1044,11 @@ def repeat(x, n):
         A tensor.
     """
     assert ndim(x) == 2
-    x = repeat_elements(x, n, 1)
-    new_shape = list(int_shape(x))
-    new_shape.insert(1, n)
-    x = sd.reshape(x, *new_shape)
+    shape = x.shape()
+    shape = [shape[0], n, shape[1]]
+    x = x.repeat(1, n)
+    x = x.reshape(*shape)
+    return x
 
 @op
 def arange(start, stop=None, step=1, dtype='int32'):
@@ -1061,7 +1088,8 @@ def tile(x, n):
     """
     if isinstance(n, int):
         n = [n]
-    return sd.tile(x, n)
+    return Nd4j.tile(x, *n)
+
 
 @op
 def flatten(x):
@@ -1073,19 +1101,21 @@ def flatten(x):
     # Returns
         A tensor, reshaped into 1-D
     """
-    s = int_shape(x)
+    s = x.shape()
     vec_size = 1
     for i in s:
         vec_size *= i
-    return sd.reshape(x, vec_size)
+    return x.reshape(vec_size)
 
 @op
 def batch_flatten(x):
-    s = int_shape(x)
+    s = x.shape()
     vec_size = 1
+    bsize = s[0]
     for i in s[1:]:
         vec_size *= i
-    return sd.reshape(x, -1, vec_size)
+    return x.reshape(bsize, vec_size)
+
 
 @op
 def expand_dims(x, axis=-1):
@@ -1098,7 +1128,11 @@ def expand_dims(x, axis=-1):
     # Returns
         A tensor with expanded dimensions.
     """
-    return sd.expandDims(x, axis)
+    # bug in Nd4j expand dims
+    s = x.shape()
+    s.insert(axis, 1)
+    return x.reshape(*s)
+
 
 @op
 def squeeze(x, axis):
@@ -1111,7 +1145,10 @@ def squeeze(x, axis):
     # Returns
         A tensor with the same data as `x` but reduced dimensions.
     """
-    return sd.squeeze(x, axis)
+    s = x.shape()
+    one = s.pop(axis)
+    assert one == 1, "Only dimensions of size 1 can be squeezed."
+    return x.reshape(*s)
 
 @op
 def temporal_padding(x, padding=(1, 1)):
@@ -1137,10 +1174,17 @@ def stack(x, axis=0):
     # Returns
         A tensor.
     """
-    return tf.stack(x, axis)
+    if axis == 0:
+        return Nd4j.pile(*x)
+    x = x[:]
+    s = x[0].shape()
+    s.insert(axis, 1)
+    for i, a in enumerate(x):
+        x[i] = a.reshape(*s)
+    return Nd4j.concat(axis, *x)
 
 
-@op
+@sdop
 def one_hot(indices, num_classes):
     """Computes the one-hot representation of an integer tensor.
 
@@ -1162,13 +1206,17 @@ def bias_add(x, bias, data_format=None):
         data_format = image_data_format()
     if data_format not in {'channels_first', 'channels_last'}:
         raise ValueError('Unknown data_format ' + str(data_format))
-    bias_ndim = ndim(bias)
-    x_ndim = ndim(x)
+    bias_shape = tuple(bias.shape())
+    bias_ndim = len(bias_shape)
+    x_ndim = len(x.shape())
+    if bias_ndim == 2 and x_ndim == 2:
+        bias = bias.reshape(bias_shape[1])
+        bias_shape = bias_shape[1:]
+        bias_ndim = 1
     if bias_ndim != 1 and bias_ndim != x_ndim - 1:
         raise ValueError('Unexpected bias dimensions %d, '
                          'expect to be 1 or %d dimensions'
                          % (bias_ndim, x_ndim - 1))
-    bias_shape = tuple(bias.shape())
     if x_ndim == 5:
         if data_format == 'channels_first':
             if bias_ndim == 1:
@@ -1215,8 +1263,82 @@ def bias_add(x, bias, data_format=None):
                 x.addi(bias.reshape(1, *bias_shape))
                 #x += reshape(bias, (1,) + bias_shape)
     else:
-        x.addi(bias)
+        ndim_diff = x_ndim - bias_ndim
+        if ndim_diff:
+            bias = bias.reshape(*((1,) * ndim_diff + bias_shape))
+        return x.addi(bias)
     return x
+
+
+def _jp_list_to_array(x):
+    for i, a in enumerate(x):
+        if is_jumpy(a):
+            x[i] = a.array
+
+def _jp_to_array(x):
+    if is_jumpy(x):
+        return x.array
+    return x
+
+@op
+def rnn(step_function, inputs, initial_states,
+        go_backwards=False, mask=None, constants=None,
+        unroll=False, input_length=None):
+    global _RET_NO_WRAP
+    #_RET_NO_WRAP = True
+    s = inputs.shape()
+    input_length = s[1]
+    timesteps = []
+    for t in range(input_length):
+        timesteps.append(inputs.get(NDArrayIndex.all(), NDArrayIndex.point(t)))
+    if go_backwards:
+        timesteps = timesteps[::-1]
+    states = initial_states[:]
+    outputs = []
+    output = None
+    if constants is None:
+        constants = []
+    if mask is None:
+        for x in timesteps:
+            output, states = step_function(x, states + constants)
+            output = _jp_to_array(output)
+            _jp_list_to_array(states)
+            outputs.append(output)
+    else:
+        mask = mask.reshape(s[0], input_length, 1)
+        inv_mask = Nd4j.ones_like(mask).sub(mask)
+        output = Nd4j.zeros_like(step_function(inputs.get(NDArrayIndex.all(), NDArrayIndex.point(0), states + constants))[0])
+        for t in range(input_length):
+            mask_t = mask.get(NDArrayIndex.all(), NDArrayIndex.point(t))
+            inv_mask_t = inv_mask.get(NDArrayIndex.all(), NDArrayIndex.point(t))
+            output_t, states_t = step_function(timesteps[t], states + constants)
+            output_t = _jp_to_array(output)
+            _jp_list_to_array(states_t)
+            output = output_t.mul(mask_t).add(output.mul(inv_mask_t))
+            for i in range(len(states)):
+                states[i] = states_t[i].mul(mask_t).add(states[i].mul(inv_mask_t))
+            outputs.append(output)
+    outputs = Nd4j.pile(*outputs)
+    dims = list(range(len(outputs.shape())))
+    dims[1], dims[0] = dims[0], dims[1]
+    outputs = outputs.permute(*dims)
+    #_RET_NO_WRAP = False
+    return output, outputs, states
+
+
+@op
+def hard_sigmoid(x):
+    return Transforms.sigmoid(x)  # TODO
+
+
+@op
+def sigmoid(x):
+    return Transforms.sigmoid(x)
+
+
+@op
+def tanh(x):
+    return Transforms.tanh(x)
 
 
 
